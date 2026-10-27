@@ -1,0 +1,10 @@
+appId: ${APP_ID}
+---
+# Alur utuh per device: login, lalu input produksi bila role-nya termasuk INPUT_ROLES.
+- launchApp:
+    clearState: true
+- runFlow: login.yaml
+- runFlow:
+    when:
+      true: ${RUN_PRODUKSI == 'true'}
+    file: input-produksi.yaml

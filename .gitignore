@@ -1,0 +1,14 @@
+# APK aplikasi yang diuji: biner milik pemilik app dan berukuran puluhan MB, jangan masuk repo publik.
+*.apk
+*.aab
+
+# Akun uji berisi password asli. Salin dari maestro/accounts.env.example lalu isi.
+maestro/accounts.env
+
+# Status runtime (file pid, log emulator) dan laporan uji Maestro.
+.devices/
+maestro/reports/
+
+# Lain-lain
+.DS_Store
+__pycache__/

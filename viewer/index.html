@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="wall-token" content="__TOKEN__">
+<title>Dinding Emulator</title>
+<style>
+  :root {
+    --bg: #0b0f17; --panel: #121826; --line: #243049;
+    --text: #e6ebf5; --muted: #8b97b0; --ok: #3ecf8e; --off: #5b6785; --busy: #f0b429;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%; margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif;
+  }
+  header {
+    height: 48px; display: flex; align-items: center; gap: 12px;
+    padding: 0 16px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 15px; font-weight: 600; margin: 0; white-space: nowrap; }
+  header .muted { color: var(--muted); white-space: nowrap; }
+  header .hint { font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  header .spacer { flex: 1; }
+  .btn {
+    font: inherit; font-size: 12px; padding: 4px 12px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: #1a2336; color: var(--text);
+  }
+  .btn:hover:not(:disabled) { background: #222d46; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.primary { background: #1f4fd6; border-color: #2b63ff; }
+  .btn.primary:hover:not(:disabled) { background: #2a5ee8; }
+  .btn.icon { padding: 3px 9px; min-width: 30px; }
+  main {
+    height: calc(100% - 48px); padding: 12px; display: grid; gap: 12px;
+    grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
+    grid-template-rows: repeat(var(--rows, 2), minmax(0, 1fr));
+  }
+  .cell {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+  }
+  .cell.off { border-style: dashed; }
+  .label {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden;
+  }
+  .label b { font-weight: 600; }
+  .label .meta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--off); flex: none; }
+  .on .dot { background: var(--ok); }
+  .busy .dot { background: var(--busy); }
+  .screen {
+    position: relative; flex: 1; min-height: 0; padding: 8px; display: flex;
+    align-items: center; justify-content: center; color: var(--off); text-align: center;
+  }
+  .screen img {
+    max-width: 100%; max-height: 100%; width: auto; height: auto;
+    border-radius: 10px; box-shadow: 0 0 0 1px var(--line);
+    cursor: pointer; touch-action: none; user-select: none; -webkit-user-drag: none;
+  }
+  .ripple {
+    position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%;
+    background: rgba(98, 150, 255, .55); pointer-events: none; animation: ripple .45s ease-out forwards;
+  }
+  @keyframes ripple { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+  .pad {
+    display: none; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 6px 8px; border-top: 1px solid var(--line);
+  }
+  .on .pad { display: flex; }
+  .pad .sep { width: 4px; }
+  .pad input {
+    flex: 1 1 90px; min-width: 0; font: inherit; font-size: 12px; color: var(--text);
+    background: #0f1626; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px;
+  }
+  .pad input:focus { outline: none; border-color: #2b63ff; }
+  main.zoomed { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  main.zoomed .cell:not(.zoom) { display: none; }
+  #toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    background: #1a2336; border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 14px; max-width: 80%; opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Dinding Emulator</h1>
+  <span class="muted" id="count">memuat…</span>
+  <span class="muted" id="mem"></span>
+  <span class="spacer"></span>
+  <span class="muted hint" id="hint">klik layar = tap · seret = geser · tahan = tekan lama · roda mouse = gulir</span>
+  <button class="btn primary" id="all-on">Nyalakan semua</button>
+  <button class="btn" id="all-off">Matikan semua</button>
+</header>
+<main id="wall"></main>
+<div id="toast" role="status"></div>
+<script>
+  const TOKEN = document.querySelector('meta[name="wall-token"]').content;
+  const params = new URLSearchParams(location.search);
+  const N = Math.max(1, Math.min(10, parseInt(params.get('n') || '6', 10) || 6));
+  const INTERVAL = Math.max(150, parseInt(params.get('ms') || '500', 10) || 500);
+  const cols = N <= 3 ? N : Math.ceil(N / 2);   // N>3 selalu 2 baris: 6 HP -> 3 kolom x 2 baris
+  const rows = Math.ceil(N / cols);
+
+  const wall = document.getElementById('wall');
+  wall.style.setProperty('--cols', cols);
+  wall.style.setProperty('--rows', rows);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const iconBtn = (glyph, title) => {
+    const b = el('button', 'btn icon', glyph);
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    return b;
+  };
+
+  let toastTimer;
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 5000);
+  }
+
+  async function post(path, body) {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok && j.ok, status: r.status, j };
+  }
+
+  async function power(body) {
+    try {
+      const { ok, status, j } = await post('/api/power', body);
+      if (!ok) toast(j.error || 'Permintaan ditolak (' + status + ')');
+      else if (!j.diproses.length) toast('Tidak ada yang perlu diubah.');
+      else refreshOnce();   // tampilkan "menyalakan…/mematikan…" seketika, tanpa menunggu poll berikutnya
+    } catch (e) {
+      toast('Server tidak terjangkau.');
+    }
+  }
+
+  // Kontrol HP. Teks yang diketik hanya dikirim ke server lokal ini lalu ke emulator, tidak disimpan.
+  async function sendInput(slot, body) {
+    if (!slot.serial) return;
+    try {
+      const { ok, status, j } = await post('/api/input', Object.assign({ serial: slot.serial }, body));
+      if (!ok) toast(j.error || 'Input ditolak (' + status + ')');
+    } catch (e) {
+      toast('Server tidak terjangkau.');
+    }
+  }
+
+  function ripple(slot, e) {
+    const r = slot.screen.getBoundingClientRect();
+    const dot = el('div', 'ripple');
+    dot.style.left = (e.clientX - r.left) + 'px';
+    dot.style.top = (e.clientY - r.top) + 'px';
+    slot.screen.append(dot);
+    setTimeout(() => dot.remove(), 500);
+  }
+
+  function attachControls(slot, img) {
+    let drag = null;
+    const rel = (e) => {
+      const r = img.getBoundingClientRect();
+      return { x: clamp01((e.clientX - r.left) / r.width), y: clamp01((e.clientY - r.top) / r.height) };
+    };
+    img.draggable = false;
+    img.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      try { img.setPointerCapture(e.pointerId); } catch (_) { /* event sintetis / peramban lama */ }
+      drag = { p: rel(e), t: performance.now() };
+    });
+    img.addEventListener('pointerup', (e) => {
+      if (!drag) return;
+      const p0 = drag.p, p1 = rel(e), dt = performance.now() - drag.t;
+      drag = null;
+      ripple(slot, e);
+      if (Math.hypot(p1.x - p0.x, p1.y - p0.y) < 0.02) {
+        sendInput(slot, { type: dt > 600 ? 'longpress' : 'tap', x: p0.x, y: p0.y });
+      } else {
+        sendInput(slot, { type: 'swipe', x: p0.x, y: p0.y, x2: p1.x, y2: p1.y, ms: Math.min(800, Math.max(80, Math.round(dt))) });
+      }
+    });
+    img.addEventListener('pointercancel', () => { drag = null; });
+    let lastWheel = 0;
+    img.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const now = performance.now();
+      if (now - lastWheel < 220) return;
+      lastWheel = now;
+      const down = e.deltaY > 0;   // gulir ke bawah = jari menggeser ke atas
+      sendInput(slot, { type: 'swipe', x: 0.5, y: down ? 0.65 : 0.35, x2: 0.5, y2: down ? 0.35 : 0.65, ms: 200 });
+    }, { passive: false });
+  }
+
+  function toggleZoom(slot) {
+    const zoomed = !slot.cell.classList.contains('zoom');
+    slots.forEach((s) => { s.cell.classList.remove('zoom'); s.zoomBtn.textContent = '⤢'; });
+    wall.classList.toggle('zoomed', zoomed);
+    if (zoomed) { slot.cell.classList.add('zoom'); slot.zoomBtn.textContent = '⤡'; }
+  }
+  function unzoom() {
+    wall.classList.remove('zoomed');
+    slots.forEach((s) => { s.cell.classList.remove('zoom'); s.zoomBtn.textContent = '⤢'; });
+  }
+
+  function buildPad(slot) {
+    const pad = el('div', 'pad');
+    const keys = [['◀', 'Kembali (Back)', 'back'], ['●', 'Beranda (Home)', 'home'], ['■', 'Aplikasi terbaru (Recents)', 'recents']];
+    keys.forEach(([glyph, title, key]) => {
+      const b = iconBtn(glyph, title);
+      b.addEventListener('click', () => sendInput(slot, { type: 'key', key }));
+      pad.append(b);
+    });
+    pad.append(el('span', 'sep'));
+    [['⌫', 'Hapus satu karakter (Backspace)', 'delete'], ['⏎', 'Enter', 'enter']].forEach(([glyph, title, key]) => {
+      const b = iconBtn(glyph, title);
+      b.addEventListener('click', () => sendInput(slot, { type: 'key', key }));
+      pad.append(b);
+    });
+    const input = el('input');
+    input.type = 'text';
+    input.placeholder = 'ketik ke HP…';
+    input.maxLength = 200;
+    input.autocomplete = 'off';
+    input.autocapitalize = 'off';
+    input.spellcheck = false;
+    input.setAttribute('aria-label', 'Teks untuk ' + slot.name);
+    const send = el('button', 'btn', 'Kirim');
+    const submit = () => {
+      const text = input.value;
+      if (!text) { sendInput(slot, { type: 'key', key: 'enter' }); return; }
+      if (!/^[\x20-\x7E]+$/.test(text)) { toast('Hanya karakter ASCII (tanpa aksen/emoji) yang bisa diketik ke HP.'); return; }
+      input.value = '';   // jangan biarkan teks (mis. password) tertinggal di layar
+      sendInput(slot, { type: 'text', text });
+    };
+    send.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    pad.append(input, send);
+    return pad;
+  }
+
+  const slots = [];
+  for (let i = 1; i <= N; i++) {
+    const name = 'erp-' + String(i).padStart(2, '0');
+    const cell = el('div', 'cell off');
+    const meta = el('span', 'meta', 'offline');
+    const zoomBtn = iconBtn('⤢', 'Perbesar / kecilkan');
+    const btn = el('button', 'btn', 'Nyalakan');
+    const label = el('div', 'label');
+    label.append(el('span', 'dot'), el('b', '', name), meta, zoomBtn, btn);
+    const screen = el('div', 'screen', 'belum menyala');
+    const slot = { name, cell, meta, btn, zoomBtn, screen, serial: null, img: null, fail: 0, busy: null };
+    const pad = buildPad(slot);
+    cell.append(label, screen, pad);
+    wall.append(cell);
+    btn.addEventListener('click', () => power({ avd: name, action: slot.serial ? 'off' : 'on' }));
+    zoomBtn.addEventListener('click', () => { if (slot.serial) toggleZoom(slot); });
+    slots.push(slot);
+  }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') unzoom(); });
+
+  const confirmOn = (est) => confirm(
+    'Nyalakan semua ' + N + ' emulator (headless)?\n\n' +
+    (est ? 'Perkiraan butuh ±' + (est / 1024).toFixed(0) + ' GB RAM. ' : '') +
+    'Tutup Chrome dan aplikasi besar lain dulu agar Mac tidak swap.');
+  let lastEst = null;
+  document.getElementById('all-on').addEventListener('click', () => {
+    if (confirmOn(lastEst)) power({ all: true, n: N, action: 'on' });
+  });
+  document.getElementById('all-off').addEventListener('click', () => {
+    if (confirm('Matikan semua emulator yang sedang menyala?')) power({ all: true, n: N, action: 'off' });
+  });
+
+  function render(slot, d, busy) {
+    slot.busy = busy || null;
+    slot.serial = d ? d.serial : null;
+    const label = { starting: 'menyalakan…', stopping: 'mematikan…' }[busy];
+    slot.cell.classList.toggle('on', !!d);
+    slot.cell.classList.toggle('off', !d);
+    slot.cell.classList.toggle('busy', !!busy);
+    slot.btn.disabled = !!busy;
+    slot.btn.textContent = busy ? label : (d ? 'Matikan' : 'Nyalakan');
+    if (d) {
+      slot.meta.textContent = ['API ' + d.api, d.role, d.serial].filter(Boolean).join(' · ');
+      if (!slot.img) {
+        const img = el('img');
+        img.alt = slot.name;
+        img.style.visibility = 'hidden';   // tampil setelah frame pertama termuat
+        img.addEventListener('load', () => { img.style.visibility = 'visible'; });
+        attachControls(slot, img);
+        slot.img = img;
+        slot.screen.textContent = '';
+        slot.screen.append(img);
+      }
+    } else {
+      slot.meta.textContent = busy ? label : 'offline';
+      if (slot.img) { slot.img = null; }
+      slot.screen.textContent = busy === 'starting' ? 'menyalakan… (±15–35 detik)' : 'belum menyala';
+      slot.cell.classList.remove('zoom');
+    }
+  }
+
+  async function refreshOnce() {
+    try {
+      const j = await (await fetch('/api/devices?n=' + N, { cache: 'no-store' })).json();
+      lastEst = j.est_mb;
+      const byAvd = new Map(j.devices.map((d) => [d.avd, d]));
+      slots.forEach((s) => render(s, byAvd.get(s.name), j.busy[s.name]));
+      if (!slots.some((s) => s.serial)) unzoom();
+      document.getElementById('count').textContent =
+        slots.filter((s) => s.serial).length + ' dari ' + N + ' online';
+      const m = j.mem || {};
+      document.getElementById('mem').textContent = m.free_pct == null ? '' :
+        'RAM bebas ' + m.free_pct + '%' + (m.swap_mb ? ' · swap ' + (m.swap_mb / 1024).toFixed(1) + ' GB' : '');
+    } catch (e) {
+      document.getElementById('count').textContent = 'server tidak terjangkau';
+    }
+  }
+
+  async function refreshDevices() {
+    for (;;) {
+      await refreshOnce();
+      await sleep(3000);
+    }
+  }
+
+  async function pump(slot) {
+    for (;;) {
+      if (!slot.serial || !slot.img || document.hidden) { await sleep(800); continue; }
+      try {
+        const r = await fetch('/shot/' + slot.serial + '.png', { cache: 'no-store' });
+        if (r.ok) {
+          const url = URL.createObjectURL(await r.blob());
+          const old = slot.img && slot.img.dataset.url;
+          if (slot.img) { slot.img.src = url; slot.img.dataset.url = url; }
+          if (old) URL.revokeObjectURL(old);
+          slot.fail = 0;
+        } else {
+          slot.fail++;
+        }
+      } catch (e) {
+        slot.fail++;
+      }
+      await sleep(slot.fail > 3 ? 2000 : INTERVAL);
+    }
+  }
+
+  refreshDevices();
+  slots.forEach(pump);
+</script>
+</body>
+</html>

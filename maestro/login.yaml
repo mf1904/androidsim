@@ -1,0 +1,18 @@
+appId: ${APP_ID}
+---
+# Sub-flow login untuk app MFS (id.megasys.mobile). Dipanggil dari main.yaml setelah launchApp.
+# Env yang dipakai: USERNAME, PASSWORD (dikirim run-all.sh dari accounts.env).
+# Selector sudah diverifikasi pada layar login v1.0.0 (kolom input hanya punya hint, tanpa resource-id):
+#   kolom username = hint "username", kolom password = hint "••••••••", tombol = "Masuk".
+- assertVisible: "Masuk untuk melanjutkan"
+- tapOn: "username"
+- inputText: ${USERNAME}
+- tapOn: "••••••••"
+- inputText: ${PASSWORD}
+- hideKeyboard
+- tapOn: "Masuk"
+# Berhasil bila layar login hilang. Login gagal (salah password / server tidak terjangkau)
+# membuat layar ini tetap tampil sehingga flow gagal di sini.
+- extendedWaitUntil:
+    notVisible: "Masuk untuk melanjutkan"
+    timeout: 20000

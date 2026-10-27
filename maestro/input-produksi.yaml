@@ -1,0 +1,18 @@
+appId: ${APP_ID}
+---
+# Env yang dipakai: AVD_NAME, QTY (dikirim run-all.sh; QTY beda per device agar
+# data dari tiap emulator bisa dibedakan di server).
+# TODO: BELUM DIVERIFIKASI. Nama menu dan field di bawah hanya tebakan umum, bukan layar aplikasi
+# yang sebenarnya. Ambil selector asli dari tiap layar dengan `maestro --device <id> hierarchy`,
+# lalu ganti isi di bawah.
+- tapOn: "Produksi"
+- tapOn: "Input Produksi"
+- tapOn: "Jumlah"
+- inputText: ${QTY}
+- tapOn: "Catatan"
+- inputText: "Tes otomatis ${AVD_NAME}"
+- hideKeyboard
+- tapOn: "Simpan"
+- extendedWaitUntil:
+    visible: ".*berhasil.*"
+    timeout: 20000
