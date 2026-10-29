@@ -49,8 +49,11 @@ HP yang baru menyala otomatis diberi aplikasi bila belum terpasang. `up N` selal
 `./devices.sh view` menjalankan server kecil (`viewer/`, hanya stdlib Python) dan membuka halamannya. Semua HP **mati secara
 bawaan**; HP dinyalakan (headless) dengan tombol On, per HP atau "Nyalakan semua".
 
-Kontrol: klik layar = tap, seret = geser, tahan = tekan lama, roda mouse = gulir, tombol Back/Home/Recents/Hapus/Enter,
-dan kolom ketik (hanya karakter ASCII, batas `adb input text`).
+Tiap HP tampil selebar kartunya dengan rasio aslinya dan memanjang ke bawah; yang di-scroll adalah halamannya (header dengan
+tombol on/off tetap menempel di atas). Tombol ⤢ memperbesar satu HP agar seluruh layarnya muat dalam tinggi jendela.
+
+Kontrol: klik layar = tap, seret = geser, tahan = tekan lama, ⌥ (Option) + roda mouse = gulir isi HP (roda biasa menggulir
+halaman), tombol Back/Home/Recents/Hapus/Enter di atas layar, dan kolom ketik (hanya karakter ASCII, batas `adb input text`).
 
 Server hanya mendengarkan `127.0.0.1`. Endpoint yang mengubah keadaan (`/api/power`, `/api/input`) butuh token per sesi,
 Origin/Host yang cocok, dan memvalidasi input dengan daftar putih (tipe aksi, kode tombol, koordinat 0..1, teks ASCII yang
